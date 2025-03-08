@@ -385,7 +385,7 @@ def show_evaluation_form():
     # Botão para adicionar mais treinamentos (fora do formulário)
     if st.button("Adicionar Mais Treinamentos"):
         st.session_state.treinamento_count += 1
-        st.experimental_rerun()
+        st.rerun()
     
     # Seção 4: Estratégias para Crescimento
     st.markdown("---")
@@ -406,7 +406,7 @@ def show_evaluation_form():
     # Botão para adicionar mais estratégias (fora do formulário)
     if st.button("Adicionar Mais Estratégias"):
         st.session_state.estrategia_count += 1
-        st.experimental_rerun()
+        st.rerun()
     
     # Formulário final - contém as seções 5 e 6 e o botão de envio
     with st.form("evaluation_form_part2"):
@@ -491,7 +491,7 @@ def show_evaluation_form():
                     # Reset form
                     st.session_state.treinamento_count = 1
                     st.session_state.estrategia_count = 1
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Ocorreu um erro ao enviar a avaliação. Por favor, tente novamente.")
 
@@ -515,7 +515,7 @@ def show_admin_area():
             if login_button:
                 if username == "EDILENE SANTOS" and password == "PASTORAEDILENE":
                     st.session_state.admin_authenticated = True
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Usuário ou senha incorretos.")
     else:
@@ -529,7 +529,7 @@ def show_admin_dashboard():
     # Add logout button in the sidebar
     if st.sidebar.button("Sair"):
         st.session_state.admin_authenticated = False
-        st.experimental_rerun()
+        st.rerun()
     
     # Date filters
     col1, col2 = st.columns(2)
