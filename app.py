@@ -21,6 +21,16 @@ DB_NAME = "postgresql"  # Nome do Banco de Dados
 DB_USER = "postgres"  # Usuário
 DB_PASSWORD = "ZAvbW7c67IKjNF"  # Senha
 
+# Map of ministry leaders
+MINISTRY_LEADERS = {
+    "Milaf": "Wendel",
+    "Midaf": "Marcela",
+    "Técnica": "Isaac",
+    "Comunicação": "Marcus",
+    "Intercessão": "Moises",
+    "Introdutores": "Mario"
+}
+
 # Database connection function
 def connect_to_db():
     """Connect to the PostgreSQL database."""
@@ -95,15 +105,52 @@ def initialize_database():
                         novos_membros INTEGER,
                         membros_qualificacao INTEGER,
                         
+                        nomes_novos_membros TEXT,
+                        nomes_membros_qualificacao TEXT,
+                        
                         comentarios TEXT,
                         
                         data_submissao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         mes_referencia VARCHAR(20),
-                        ano_referencia INTEGER
+                        ano_referencia INTEGER,
+                        semana_referencia INTEGER
                     )
                 """)
                 st.success("Banco de dados inicializado com sucesso!")
             else:
+                # Verificar se a coluna semana_referencia existe
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_name = 'avaliacoes_ministerios' AND column_name = 'semana_referencia'
+                    );
+                """)
+                semana_column_exists = cur.fetchone()[0]
+                
+                # Adicionar a coluna se não existir
+                if not semana_column_exists:
+                    cur.execute("""
+                        ALTER TABLE avaliacoes_ministerios 
+                        ADD COLUMN semana_referencia INTEGER;
+                    """)
+                
+                # Verificar se as colunas para nomes de membros existem
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_name = 'avaliacoes_ministerios' AND column_name = 'nomes_novos_membros'
+                    );
+                """)
+                novos_membros_column_exists = cur.fetchone()[0]
+                
+                # Adicionar as colunas se não existirem
+                if not novos_membros_column_exists:
+                    cur.execute("""
+                        ALTER TABLE avaliacoes_ministerios 
+                        ADD COLUMN nomes_novos_membros TEXT,
+                        ADD COLUMN nomes_membros_qualificacao TEXT;
+                    """)
+                
                 # Verificar se precisa alterar a estrutura da tabela para usar JSONB
                 try:
                     cur.execute("""
@@ -137,6 +184,10 @@ def save_evaluation(data):
             treinamentos_clean = [t for t in data["treinamentos"] if t and t.strip()]
             estrategias_clean = [e for e in data["estrategias"] if e and e.strip()]
             
+            # Converter arrays para formato JSON
+            treinamentos_json = json.dumps(treinamentos_clean)
+            estrategias_json = json.dumps(estrategias_clean)
+            
             # Insert query usando parâmetros diretamente para os arrays
             cur.execute("""
                 INSERT INTO avaliacoes_ministerios (
@@ -147,12 +198,13 @@ def save_evaluation(data):
                     reunioes_semana1, reunioes_semana2, reunioes_semana3, reunioes_semana4, reunioes_semana5,
                     treinamentos, estrategias,
                     novos_membros, membros_qualificacao,
-                    comentarios, mes_referencia, ano_referencia
+                    nomes_novos_membros, nomes_membros_qualificacao,
+                    comentarios, mes_referencia, ano_referencia, semana_referencia
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s,
-                    %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """, (
                 data["ministerio"], data["nome"], data["email"],
@@ -160,9 +212,10 @@ def save_evaluation(data):
                 data["consagracao_semana1"], data["consagracao_semana2"], data["consagracao_semana3"], data["consagracao_semana4"], data["consagracao_semana5"],
                 data["preparo_tecnico_semana1"], data["preparo_tecnico_semana2"], data["preparo_tecnico_semana3"], data["preparo_tecnico_semana4"], data["preparo_tecnico_semana5"],
                 data["reunioes_semana1"], data["reunioes_semana2"], data["reunioes_semana3"], data["reunioes_semana4"], data["reunioes_semana5"],
-                treinamentos_clean, estrategias_clean,
+                treinamentos_json, estrategias_json,
                 data["novos_membros"], data["membros_qualificacao"],
-                data["comentarios"], data["mes_referencia"], data["ano_referencia"]
+                data["nomes_novos_membros"], data["nomes_membros_qualificacao"],
+                data["comentarios"], data["mes_referencia"], data["ano_referencia"], data["semana_referencia"]
             ))
             
             conn.commit()
@@ -186,79 +239,184 @@ def main():
     # Initialize database
     initialize_database()
     
+    # Initialize session state for leader authentication
+    if "leader_authenticated" not in st.session_state:
+        st.session_state.leader_authenticated = False
+    if "current_ministry" not in st.session_state:
+        st.session_state.current_ministry = None
+    
     # Sidebar for navigation
     st.sidebar.title("Navegação")
     page = st.sidebar.radio("Ir para:", ["Formulário de Avaliação", "Área da Gestora"])
     
     if page == "Formulário de Avaliação":
-        show_evaluation_form()
+        # Check if leader is authenticated
+        if st.session_state.leader_authenticated:
+            show_evaluation_form()
+        else:
+            show_leader_login()
     else:
         show_admin_area()
+
+# Leader login page
+def show_leader_login():
+    st.title("Login de Líder de Ministério")
+    
+    st.markdown("""
+    Por favor, faça login para acessar o formulário de avaliação.
+    """)
+    
+    with st.form("leader_login_form"):
+        # Create a dropdown with ministry options
+        ministerio = st.selectbox(
+            "Ministério",
+            list(MINISTRY_LEADERS.keys()),
+            help="Selecione o seu ministério."
+        )
+        
+        # Password field with a hint
+        st.markdown("**Dica**: A senha é o nome do líder do ministério com a primeira letra maiúscula.")
+        password = st.text_input("Senha", type="password")
+        
+        login_button = st.form_submit_button("Entrar")
+        
+        if login_button:
+            # Check if the password matches the leader's name
+            if password == MINISTRY_LEADERS[ministerio]:
+                st.session_state.leader_authenticated = True
+                st.session_state.current_ministry = ministerio
+                st.success(f"Login bem-sucedido como líder do ministério {ministerio}!")
+                st.rerun()
+            else:
+                st.error("Senha incorreta. Por favor, tente novamente.")
 
 # Evaluation form page
 def show_evaluation_form():
     st.title("PREMIAÇÃO ANUAL DOS MINISTÉRIOS")
     
-    st.markdown("""
-    Serão avaliados por **voto**, podendo ficar em: **Primeiro**, **Segundo** ou **Terceiro**. 
-    A avaliação será realizada mensalmente pelo **líder** ou **auxiliar** do ministério.
+    # Show who is logged in
+    st.info(f"Logado como líder do ministério: {st.session_state.current_ministry}")
     
-    *Preencha os dados com atenção para garantir uma análise precisa.**
+    # Logout button
+    if st.button("Sair"):
+        st.session_state.leader_authenticated = False
+        st.session_state.current_ministry = None
+        st.rerun()
+    
+    st.markdown("""
+    Serão avaliados, podendo ficar em: **Primeiro**, **Segundo** ou **Terceiro**. 
+    A avaliação será realizada **semanalmente** pelo **líder** ou **auxiliar** do ministério.
+    
+    *Preencha os dados com atenção para garantir uma análise precisa.*
     """)
     
-    # Inicializar session state para contadores
+    # Initialize all session state variables
     if "treinamento_count" not in st.session_state:
         st.session_state.treinamento_count = 1
     if "estrategia_count" not in st.session_state:
         st.session_state.estrategia_count = 1
-    
-    # Armazenar os dados do formulário no session state
+    if "semana_atual" not in st.session_state:
+        st.session_state.semana_atual = 1
+    if "novos_membros_lista" not in st.session_state:
+        st.session_state.novos_membros_lista = []
+    if "membros_qualificacao_lista" not in st.session_state:
+        st.session_state.membros_qualificacao_lista = []
     if "form_data" not in st.session_state:
         st.session_state.form_data = {}
     
-    # Formulário principal - começa com as informações gerais até a seção 2
-    with st.form("evaluation_form_part1"):
-        # Seção 0: Informações Gerais
-        st.subheader("Informações Gerais")
-        col1, col2 = st.columns(2)
+    # SECTION: Basic Information - OUTSIDE FORM
+    st.subheader("Informações Gerais")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Display the ministry from login (disabled)
+        ministerio = st.selectbox(
+            "Ministério *",
+            [st.session_state.current_ministry],
+            disabled=True,
+            help="Ministério selecionado no login."
+        )
+    
+    with col2:
+        # Mês e ano de referência
+        meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
+                "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        mes_atual = datetime.now().month - 1  # Para selecionar o mês atual por padrão (0-indexed)
         
-        with col1:
-            ministerio = st.selectbox(
-                "Ministério *",
-                ["", "Intercessão", "Introdutores", "MIDAF", "MILAF", "Comunicação", "Técnica"],
-                help="Selecione o ministério ao qual você pertence."
-            )
-            
-            nome = st.text_input(
-                "Nome do Líder ou Auxiliar *",
-                help="Digite seu nome completo."
-            )
+        mes_referencia = st.selectbox(
+            "Mês de Referência *",
+            meses,
+            index=mes_atual,
+            help="Selecione o mês ao qual esta avaliação se refere."
+        )
         
-        with col2:
-            email = st.text_input(
-                "Email *",
-                help="Digite seu email para contato."
-            )
-            
-            # Mês e ano de referência
-            meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
-                     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-            mes_atual = datetime.now().month - 1  # Para selecionar o mês atual por padrão (0-indexed)
-            
-            mes_referencia = st.selectbox(
-                "Mês de Referência *",
-                meses,
-                index=mes_atual,
-                help="Selecione o mês ao qual esta avaliação se refere."
-            )
-            
-            ano_atual = datetime.now().year
-            ano_referencia = st.selectbox(
-                "Ano de Referência *",
-                list(range(ano_atual-2, ano_atual+1)),
-                index=2,  # Seleciona o ano atual por padrão
-                help="Selecione o ano ao qual esta avaliação se refere."
-            )
+        ano_atual = datetime.now().year
+        ano_referencia = st.selectbox(
+            "Ano de Referência *",
+            list(range(ano_atual-2, ano_atual+1)),
+            index=2,  # Seleciona o ano atual por padrão
+            help="Selecione o ano ao qual esta avaliação se refere."
+        )
+    
+    # Dropdown de semana FORA do formulário para permitir atualizações imediatas
+    semana_referencia = st.selectbox(
+        "Semana de Referência *",
+        list(range(1, 6)),  # 5 semanas possíveis no mês
+        key="semana_selecionada",
+        help="Selecione a semana do mês à qual esta avaliação se refere."
+    )
+    
+    # Atualiza a semana no session state quando alterada
+    st.session_state.semana_atual = semana_referencia
+    
+    # Define os labels das semanas
+    semana_label = {
+        1: "Primeira Semana",
+        2: "Segunda Semana",
+        3: "Terceira Semana",
+        4: "Quarta Semana",
+        5: "Quinta Semana"
+    }
+    
+    # Exemplos para cada tipo de seção
+    exemplo_consagracao = {
+        1: "(Ex.: A equipe realizou jejum na quarta-feira e oração coletiva antes do ensaio.)",
+        2: "(Ex.: Oração individual diária, leitura bíblica em grupo)",
+        3: "(Ex.: Tempo de louvor e adoração juntos)",
+        4: "(Ex.: Vigília de oração, intercessão por necessidades específicas)",
+        5: "(Ex.: Agradecimento e celebração, oração por frutos do trabalho)"
+    }
+    
+    exemplo_preparo = {
+        1: "(Ex: Estudo da documentação técnica, testes iniciais de equipamentos.)",
+        2: "(Ex: Desenvolvimento de protótipos, simulações e análises de desempenho.)",
+        3: "(Ex: Ajustes finais em equipamentos, preparação para testes de campo.)",
+        4: "(Ex: Realização de testes de campo, coleta e análise de dados.)",
+        5: "(Ex: Elaboração de relatório técnico, apresentação dos resultados.)"
+    }
+    
+    exemplo_reunioes = {
+        1: "(Ex: Reunião de planejamento inicial, definição de metas e cronograma.)",
+        2: "(Ex: Reunião de acompanhamento do progresso, discussão de desafios e soluções.)",
+        3: "(Ex: Reunião de revisão de testes, ajustes e preparação para apresentação.)",
+        4: "(Ex: Reunião de avaliação dos resultados, feedback e planejamento para próximas etapas.)",
+        5: "(Ex: Reunião de encerramento, avaliação final e definição de próximos passos.)"
+    }
+    
+    # SECTION: FORM 1 - Personal info and weekly activities
+    st.markdown("---")
+    with st.form("form_part1"):
+        # Informações pessoais
+        st.subheader("Informações do Responsável")
+        nome = st.text_input(
+            "Nome de quem está preenchendo *",
+            help="Digite o nome completo de quem está preenchendo este formulário."
+        )
+        
+        email = st.text_input(
+            "Email *",
+            help="Digite seu email para contato."
+        )
         
         st.markdown("---")
         
@@ -281,65 +439,71 @@ def show_evaluation_form():
         # Seção 2: Preparo da Equipe para a Celebração
         st.subheader("Seção 2 - Preparo da Equipe para a Celebração")
         
+        # Mostrar informações sobre a semana atual
+        st.info(f"Preenchendo informações para: {semana_label[st.session_state.semana_atual]}")
+        
         # Consagração (Jejum e Oração)
         st.subheader("Consagração (Jejum e Oração)")
-
-        st.markdown("**Primeira Semana**: (Ex.: A equipe realizou jejum na quarta-feira e oração coletiva antes do ensaio.)")
-        consagracao_semana1 = st.text_area("", help="Descreva as atividades de jejum e oração realizadas na primeira semana.")
-
-        st.markdown("**Segunda Semana**: (Ex.: Oração individual diária, leitura bíblica em grupo)")
-        consagracao_semana2 = st.text_area("", help="Descreva as atividades de jejum e oração realizadas na segunda semana.")
-
-        st.markdown("**Terceira Semana**: (Ex.: Tempo de louvor e adoração juntos)")
-        consagracao_semana3 = st.text_area("", help="Descreva as atividades de jejum e oração realizadas na terceira semana.")
-
-        st.markdown("**Quarta Semana**: (Ex.: Vigília de oração, intercessão por necessidades específicas)")
-        consagracao_semana4 = st.text_area("", help="Descreva as atividades de jejum e oração realizadas na quarta semana.")
-
-        st.markdown("**Quinta Semana (quando houver)**: (Ex.: Agradecimento e celebração, oração por frutos do trabalho)")
-        consagracao_semana5 = st.text_area("", help="Descreva as atividades de jejum e oração realizadas na quinta semana, se houver.")
+        
+        # Inicializar os campos de todas as semanas vazios
+        consagracao_semana1 = consagracao_semana2 = consagracao_semana3 = consagracao_semana4 = consagracao_semana5 = ""
+        
+        # Mostrar apenas o campo da semana selecionada
+        st.markdown(f"**{semana_label[st.session_state.semana_atual]}**: {exemplo_consagracao[st.session_state.semana_atual]}")
+        if st.session_state.semana_atual == 1:
+            consagracao_semana1 = st.text_area("Descrição da Consagração", key="consagracao1", help=f"Descreva as atividades de jejum e oração realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 2:
+            consagracao_semana2 = st.text_area("Descrição da Consagração", key="consagracao2", help=f"Descreva as atividades de jejum e oração realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 3:
+            consagracao_semana3 = st.text_area("Descrição da Consagração", key="consagracao3", help=f"Descreva as atividades de jejum e oração realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 4:
+            consagracao_semana4 = st.text_area("Descrição da Consagração", key="consagracao4", help=f"Descreva as atividades de jejum e oração realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 5:
+            consagracao_semana5 = st.text_area("Descrição da Consagração", key="consagracao5", help=f"Descreva as atividades de jejum e oração realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
 
         # Preparo Técnico (Ensaio, preparo técnico e equipamentos)
         st.subheader("Preparo Técnico (Ensaio, preparo técnico e equipamentos)")
 
-        st.markdown("**Primeira Semana**: (Ex: Estudo da documentação técnica, testes iniciais de equipamentos.)")
-        preparo_tecnico_semana1 = st.text_area("", help="Descreva as atividades de preparo técnico realizadas na primeira semana.")
-
-        st.markdown("**Segunda Semana**: (Ex: Desenvolvimento de protótipos, simulações e análises de desempenho.)")
-        preparo_tecnico_semana2 = st.text_area("", help="Descreva as atividades de preparo técnico realizadas na segunda semana.")
-
-        st.markdown("**Terceira Semana**: (Ex: Ajustes finais em equipamentos, preparação para testes de campo.)")
-        preparo_tecnico_semana3 = st.text_area("", help="Descreva as atividades de preparo técnico realizadas na terceira semana.")
-
-        st.markdown("**Quarta Semana**: (Ex: Realização de testes de campo, coleta e análise de dados.)")
-        preparo_tecnico_semana4 = st.text_area("", help="Descreva as atividades de preparo técnico realizadas na quarta semana.")
-
-        st.markdown("**Quinta Semana (quando houver)**: (Ex: Elaboração de relatório técnico, apresentação dos resultados.)")
-        preparo_tecnico_semana5 = st.text_area("", help="Descreva as atividades de preparo técnico realizadas na quinta semana, se houver.")
+        # Inicializar os campos de todas as semanas vazios
+        preparo_tecnico_semana1 = preparo_tecnico_semana2 = preparo_tecnico_semana3 = preparo_tecnico_semana4 = preparo_tecnico_semana5 = ""
+        
+        # Mostrar apenas o campo da semana selecionada
+        st.markdown(f"**{semana_label[st.session_state.semana_atual]}**: {exemplo_preparo[st.session_state.semana_atual]}")
+        if st.session_state.semana_atual == 1:
+            preparo_tecnico_semana1 = st.text_area("Descrição do Preparo Técnico", key="preparo1", help=f"Descreva as atividades de preparo técnico realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 2:
+            preparo_tecnico_semana2 = st.text_area("Descrição do Preparo Técnico", key="preparo2", help=f"Descreva as atividades de preparo técnico realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 3:
+            preparo_tecnico_semana3 = st.text_area("Descrição do Preparo Técnico", key="preparo3", help=f"Descreva as atividades de preparo técnico realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 4:
+            preparo_tecnico_semana4 = st.text_area("Descrição do Preparo Técnico", key="preparo4", help=f"Descreva as atividades de preparo técnico realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 5:
+            preparo_tecnico_semana5 = st.text_area("Descrição do Preparo Técnico", key="preparo5", help=f"Descreva as atividades de preparo técnico realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
 
         # Reuniões
         st.subheader("Reuniões")
-
-        st.markdown("**Primeira Semana**: (Ex: Reunião de planejamento inicial, definição de metas e cronograma.)")
-        reunioes_semana1 = st.text_area("", help="Descreva as reuniões realizadas na primeira semana.")
-
-        st.markdown("**Segunda Semana**: (Ex: Reunião de acompanhamento do progresso, discussão de desafios e soluções.)")
-        reunioes_semana2 = st.text_area("", help="Descreva as reuniões realizadas na segunda semana.")
-
-        st.markdown("**Terceira Semana**: (Ex: Reunião de revisão de testes, ajustes e preparação para apresentação.)")
-        reunioes_semana3 = st.text_area("", help="Descreva as reuniões realizadas na terceira semana.")
-
-        st.markdown("**Quarta Semana**: (Ex: Reunião de avaliação dos resultados, feedback e planejamento para próximas etapas.)")
-        reunioes_semana4 = st.text_area("", help="Descreva as reuniões realizadas na quarta semana.")
-
-        st.markdown("**Quinta Semana (quando houver)**: (Ex: Reunião de encerramento, celebração das conquistas e aprendizados.)")
-        reunioes_semana5 = st.text_area("", help="Descreva as reuniões realizadas na quinta semana, se houver.")
-        st.markdown("---")
-        # Botão de submissão para a primeira parte
-        part1_submitted = st.form_submit_button("Continuar para próxima seção")
         
-        if part1_submitted:
-            # Salvar dados da parte 1 no session state
+        # Inicializar os campos de todas as semanas vazios
+        reunioes_semana1 = reunioes_semana2 = reunioes_semana3 = reunioes_semana4 = reunioes_semana5 = ""
+        
+        # Mostrar apenas o campo da semana selecionada
+        st.markdown(f"**{semana_label[st.session_state.semana_atual]}**: {exemplo_reunioes[st.session_state.semana_atual]}")
+        if st.session_state.semana_atual == 1:
+            reunioes_semana1 = st.text_area("Descrição das Reuniões", key="reunioes1", help=f"Descreva as reuniões realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 2:
+            reunioes_semana2 = st.text_area("Descrição das Reuniões", key="reunioes2", help=f"Descreva as reuniões realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 3:
+            reunioes_semana3 = st.text_area("Descrição das Reuniões", key="reunioes3", help=f"Descreva as reuniões realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 4:
+            reunioes_semana4 = st.text_area("Descrição das Reuniões", key="reunioes4", help=f"Descreva as reuniões realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        elif st.session_state.semana_atual == 5:
+            reunioes_semana5 = st.text_area("Descrição das Reuniões", key="reunioes5", help=f"Descreva as reuniões realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
+        
+        # Form submit button
+        form1_submitted = st.form_submit_button("Salvar Informações Semanais")
+        
+        if form1_submitted:
+            # Save form data to session state
             st.session_state.form_data["ministerio"] = ministerio
             st.session_state.form_data["nome"] = nome
             st.session_state.form_data["email"] = email
@@ -364,14 +528,15 @@ def show_evaluation_form():
             st.session_state.form_data["reunioes_semana5"] = reunioes_semana5
             st.session_state.form_data["mes_referencia"] = mes_referencia
             st.session_state.form_data["ano_referencia"] = ano_referencia
-            st.success("Primeira parte salva! Continue com as próximas seções.")
+            st.session_state.form_data["semana_referencia"] = st.session_state.semana_atual
+            st.success("Informações semanais salvas com sucesso! Continue preenchendo as próximas seções.")
     
-    # Seção 3: Treinamento e Capacitação
+    # SECTION: Training & Strategies - NO FORM, just inputs and buttons
     st.markdown("---")
     st.subheader("Seção 3 - Treinamento e Capacitação")
     st.markdown("Relate quais treinamentos e capacitações foram realizados pela equipe do ministério esse mês.")
     
-    # Campos para treinamentos
+    # Training fields
     treinamentos = []
     for i in range(st.session_state.treinamento_count):
         key = f"treinamento_{i}"
@@ -382,17 +547,17 @@ def show_evaluation_form():
         )
         treinamentos.append(treinamento)
     
-    # Botão para adicionar mais treinamentos (fora do formulário)
+    # Button to add more trainings
     if st.button("Adicionar Mais Treinamentos"):
         st.session_state.treinamento_count += 1
         st.rerun()
     
-    # Seção 4: Estratégias para Crescimento
+    # SECTION: Growth Strategies
     st.markdown("---")
     st.subheader("Seção 4 - Estratégias para Crescimento")
     st.markdown("Descreva as estratégias implementadas para o crescimento e desenvolvimento do ministério.")
     
-    # Campos para estratégias
+    # Strategy fields
     estrategias = []
     for i in range(st.session_state.estrategia_count):
         key = f"estrategia_{i}"
@@ -403,50 +568,76 @@ def show_evaluation_form():
         )
         estrategias.append(estrategia)
     
-    # Botão para adicionar mais estratégias (fora do formulário)
+    # Button to add more strategies
     if st.button("Adicionar Mais Estratégias"):
         st.session_state.estrategia_count += 1
         st.rerun()
     
-    # Formulário final - contém as seções 5 e 6 e o botão de envio
-    with st.form("evaluation_form_part2"):
-        st.markdown("---")
+    # SECTION: New Members - NO FORM
+    st.markdown("---")
+    st.subheader("Seção 5 - Novos Membros")
+    
+    # New members and members in training
+    col1, col2 = st.columns(2)
+    
+    # Column 1: New members
+    with col1:
+        st.markdown("### Novos Membros Incorporados")
         
-        # Seção 5: Novos Membros Qualificados
-        st.subheader("Seção 5 - Novos Membros Qualificados")
+        novo_membro = st.text_input("Nome do novo membro", key="novo_membro_input")
         
-        col1, col2 = st.columns(2)
+        if st.button("Adicionar Novo Membro"):
+            if novo_membro.strip():
+                st.session_state.novos_membros_lista.append(novo_membro.strip())
+                st.rerun()
         
-        with col1:
-            novos_membros = st.number_input(
-                "Total de novos membros incorporados ao ministério",
-                min_value=0,
-                step=1,
-                help="Informe o número total de novos membros incorporados ao ministério."
-            )
+        if st.session_state.novos_membros_lista:
+            st.markdown("**Novos membros adicionados:**")
+            for i, membro in enumerate(st.session_state.novos_membros_lista):
+                col1a, col1b = st.columns([4, 1])
+                col1a.write(f"{i+1}. {membro}")
+                if col1b.button("Remover", key=f"remove_novo_{i}"):
+                    st.session_state.novos_membros_lista.pop(i)
+                    st.rerun()
         
-        with col2:
-            membros_qualificacao = st.number_input(
-                "Total de membros em qualificação",
-                min_value=0,
-                step=1,
-                help="Informe o número total de membros que estão em processo de qualificação."
-            )
+        st.metric("Total de novos membros", len(st.session_state.novos_membros_lista))
+    
+    # Column 2: Members in training
+    with col2:
+        st.markdown("### Membros em Qualificação")
         
-        st.markdown("---")
+        membro_qualificacao = st.text_input("Nome do membro em qualificação", key="membro_qualificacao_input")
         
-        # Seção 6: Feedback e Sugestões
-        st.subheader("Seção 6 - Feedback e Sugestões")
+        if st.button("Adicionar Membro em Qualificação"):
+            if membro_qualificacao.strip():
+                st.session_state.membros_qualificacao_lista.append(membro_qualificacao.strip())
+                st.rerun()
+        
+        if st.session_state.membros_qualificacao_lista:
+            st.markdown("**Membros em qualificação adicionados:**")
+            for i, membro in enumerate(st.session_state.membros_qualificacao_lista):
+                col2a, col2b = st.columns([4, 1])
+                col2a.write(f"{i+1}. {membro}")
+                if col2b.button("Remover", key=f"remove_qualif_{i}"):
+                    st.session_state.membros_qualificacao_lista.pop(i)
+                    st.rerun()
+        
+        st.metric("Total de membros em qualificação", len(st.session_state.membros_qualificacao_lista))
+    
+    # SECTION: Final form with comments and submit button
+    st.markdown("---")
+    with st.form("form_part2"):
+        st.subheader("Seção 6 - Comentários e Finalização")
+        
         comentarios = st.text_area(
             "Comentários e Sugestões",
             help="Informe pontos de melhoria, dificuldades encontradas ou elogios."
         )
         
-        # Botão final de envio
         final_submitted = st.form_submit_button("Enviar Avaliação")
         
         if final_submitted:
-            # Validar e salvar os dados
+            # Validations
             if not ministerio or not nome or not email:
                 st.error("Por favor, preencha todos os campos obrigatórios marcados com *.")
             elif not is_valid_email(email):
@@ -478,19 +669,24 @@ def show_evaluation_form():
                     "reunioes_semana5": reunioes_semana5,
                     "treinamentos": [t for t in treinamentos if t],
                     "estrategias": [e for e in estrategias if e],
-                    "novos_membros": novos_membros,
-                    "membros_qualificacao": membros_qualificacao,
+                    "novos_membros": len(st.session_state.novos_membros_lista),
+                    "membros_qualificacao": len(st.session_state.membros_qualificacao_lista),
+                    "nomes_novos_membros": "\n".join(st.session_state.novos_membros_lista),
+                    "nomes_membros_qualificacao": "\n".join(st.session_state.membros_qualificacao_lista),
                     "comentarios": comentarios,
                     "mes_referencia": mes_referencia,
-                    "ano_referencia": ano_referencia
+                    "ano_referencia": ano_referencia,
+                    "semana_referencia": st.session_state.semana_atual
                 }
                 
                 # Save to database
                 if save_evaluation(data):
                     st.success("Avaliação enviada com sucesso! Obrigado pela sua participação.")
-                    # Reset form
+                    # Reset form and member lists
                     st.session_state.treinamento_count = 1
                     st.session_state.estrategia_count = 1
+                    st.session_state.novos_membros_lista = []
+                    st.session_state.membros_qualificacao_lista = []
                     st.rerun()
                 else:
                     st.error("Ocorreu um erro ao enviar a avaliação. Por favor, tente novamente.")
@@ -532,7 +728,7 @@ def show_admin_dashboard():
         st.rerun()
     
     # Date filters
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         meses = ["Todos", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
@@ -540,9 +736,43 @@ def show_admin_dashboard():
         mes_filtro = st.selectbox("Filtrar por Mês", meses)
     
     with col2:
-        ano_atual = datetime.now().year
-        anos = ["Todos"] + [str(year) for year in range(ano_atual-2, ano_atual+1)]
+        anos = ["Todos"]
+        # Get list of years from database
+        conn = connect_to_db()
+        if conn:
+            try:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT DISTINCT ano_referencia 
+                    FROM avaliacoes_ministerios 
+                    ORDER BY ano_referencia
+                """)
+                anos_db = [str(row[0]) for row in cur.fetchall()]
+                anos.extend(anos_db)
+            except Exception as e:
+                st.error(f"Erro ao buscar anos: {e}")
+            finally:
+                cur.close()
+                conn.close()
+                
         ano_filtro = st.selectbox("Filtrar por Ano", anos)
+
+    with col3:
+        # Add option to analyze by week or month
+        periodicidade = st.selectbox(
+            "Periodicidade da Análise",
+            ["Mensal", "Semanal"],
+            help="Escolha se deseja ver análises por mês ou por semana."
+        )
+        
+        if periodicidade == "Semanal":
+            semana_filtro = st.selectbox(
+                "Filtrar por Semana",
+                ["Todas", "1", "2", "3", "4", "5"],
+                help="Selecione a semana específica para análise."
+            )
+        else:
+            semana_filtro = "Todas"  # Default value for monthly analysis
     
     # Get data from the database
     conn = connect_to_db()
@@ -561,6 +791,11 @@ def show_admin_dashboard():
                 conditions.append("ano_referencia = %s")
                 params.append(int(ano_filtro))
             
+            # Add filter for week if weekly analysis is selected
+            if periodicidade == "Semanal" and semana_filtro != "Todas":
+                conditions.append("semana_referencia = %s")
+                params.append(int(semana_filtro))
+            
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
             
@@ -569,6 +804,20 @@ def show_admin_dashboard():
             if df.empty:
                 st.warning("Não há dados disponíveis para o período selecionado.")
             else:
+                # Add context about the analysis period
+                if periodicidade == "Semanal":
+                    period_text = f"Semana {semana_filtro}" if semana_filtro != "Todas" else "Todas as Semanas"
+                    if mes_filtro != "Todos":
+                        period_text += f" de {mes_filtro}"
+                    if ano_filtro != "Todos":
+                        period_text += f" de {ano_filtro}"
+                else:
+                    period_text = f"{mes_filtro}" if mes_filtro != "Todos" else "Todos os Meses"
+                    if ano_filtro != "Todos":
+                        period_text += f" de {ano_filtro}"
+                
+                st.subheader(f"Análise {periodicidade}: {period_text}")
+                
                 # Calculate average scores for each ministry
                 ministry_scores = df.groupby('ministerio')[
                     ['pontualidade', 'assiduidade_celebracoes', 'assiduidade_reunioes', 'trabalho_equipe']
@@ -653,6 +902,48 @@ def show_admin_dashboard():
                         f"{ministry_data['trabalho_equipe'].mean():.2f}/10"
                     )
                     
+                    # If weekly analysis is selected, show weekly trends
+                    if periodicidade == "Semanal" and mes_filtro != "Todos" and ano_filtro != "Todos":
+                        st.subheader(f"Tendências Semanais - {mes_filtro} de {ano_filtro}")
+                        
+                        # Sort by week
+                        weekly_data = ministry_data.sort_values('semana_referencia')
+                        
+                        # Create a time series for each metric
+                        fig = px.line(
+                            weekly_data,
+                            x='semana_referencia',
+                            y=['pontualidade', 'assiduidade_celebracoes', 'assiduidade_reunioes', 'trabalho_equipe'],
+                            title=f"Progresso Semanal - {selected_ministry}",
+                            labels={
+                                'semana_referencia': 'Semana', 
+                                'value': 'Pontuação', 
+                                'variable': 'Métrica'
+                            },
+                            markers=True
+                        )
+                        st.plotly_chart(fig)
+                        
+                        # Calculate week-to-week changes
+                        if len(weekly_data) >= 2:
+                            st.subheader("Evolução Semanal")
+                            metrics = ['pontualidade', 'assiduidade_celebracoes', 'assiduidade_reunioes', 'trabalho_equipe']
+                            
+                            for metric in metrics:
+                                # Get first and last week values
+                                first_value = weekly_data[metric].iloc[0]
+                                last_value = weekly_data[metric].iloc[-1]
+                                change = last_value - first_value
+                                
+                                # Display change with color
+                                col1, col2 = st.columns([1, 3])
+                                col1.metric(
+                                    metric.replace('_', ' ').title(), 
+                                    f"{last_value:.1f}",
+                                    f"{change:+.1f}",
+                                    delta_color="normal" if change >= 0 else "inverse"
+                                )
+                    
                     # Radar chart for requirements
                     categories = ['Pontualidade', 'Assiduidade Celebrações', 
                                  'Assiduidade Reuniões', 'Trabalho em Equipe']
@@ -664,33 +955,57 @@ def show_admin_dashboard():
                         ministry_data['trabalho_equipe'].mean()
                     ]
                     
-                    fig = px.line_polar(
+                    fig_radar = px.line_polar(
                         r=values,
                         theta=categories,
                         line_close=True,
                         range_r=[0, 10],
                         title=f"Perfil de Requisitos: {selected_ministry}"
                     )
-                    st.plotly_chart(fig)
+                    st.plotly_chart(fig_radar, use_container_width=True)
                     
-                    # New members statistics
-                    st.subheader("Estatísticas de Membros")
+                    # Display metrics for members
+                    st.subheader("Métricas de Crescimento")
                     
                     col1, col2 = st.columns(2)
                     
                     with col1:
                         total_new_members = ministry_data['novos_membros'].sum()
                         st.metric(
-                            "Total de Novos Membros", 
+                            f"Total de Novos Membros ({periodicidade.lower().rstrip('l')})", 
                             total_new_members
                         )
+                        
+                        if total_new_members > 0:
+                            # Coletar nomes de novos membros de todas as entradas no período
+                            nomes_novos = []
+                            for _, row in ministry_data.iterrows():
+                                if pd.notna(row['nomes_novos_membros']) and row['nomes_novos_membros']:
+                                    nomes_novos.extend([nome.strip() for nome in row['nomes_novos_membros'].split('\n') if nome.strip()])
+                            
+                            if nomes_novos:
+                                st.markdown("**Nomes dos Novos Membros:**")
+                                for nome in nomes_novos:
+                                    st.markdown(f"- {nome}")
                     
                     with col2:
                         total_qualifying_members = ministry_data['membros_qualificacao'].sum()
                         st.metric(
-                            "Total de Membros em Qualificação", 
+                            f"Total de Membros em Qualificação ({periodicidade.lower().rstrip('l')})", 
                             total_qualifying_members
                         )
+                        
+                        if total_qualifying_members > 0:
+                            # Coletar nomes de membros em qualificação de todas as entradas no período
+                            nomes_qualificacao = []
+                            for _, row in ministry_data.iterrows():
+                                if pd.notna(row['nomes_membros_qualificacao']) and row['nomes_membros_qualificacao']:
+                                    nomes_qualificacao.extend([nome.strip() for nome in row['nomes_membros_qualificacao'].split('\n') if nome.strip()])
+                            
+                            if nomes_qualificacao:
+                                st.markdown("**Nomes dos Membros em Qualificação:**")
+                                for nome in nomes_qualificacao:
+                                    st.markdown(f"- {nome}")
                     
                     # Exibir detalhes da Seção 2, 3 e 4 para o ministério selecionado
                     st.subheader("Informações Detalhadas")
@@ -705,74 +1020,116 @@ def show_admin_dashboard():
                     with tabs[0]:
                         st.subheader("Seção 2 - Preparo da Equipe para a Celebração")
                         
+                        # Definir os rótulos das semanas
+                        semana_label = {
+                            1: "Primeira Semana",
+                            2: "Segunda Semana",
+                            3: "Terceira Semana",
+                            4: "Quarta Semana",
+                            5: "Quinta Semana"
+                        }
+                        
                         # Consagração (Jejum e Oração)
                         st.markdown("### Consagração (Jejum e Oração)")
                         
-                        if pd.notna(latest_entry['consagracao_semana1']) and latest_entry['consagracao_semana1']:
-                            st.markdown(f"**Primeira Semana:**")
-                            st.write(latest_entry['consagracao_semana1'])
-                        
-                        if pd.notna(latest_entry['consagracao_semana2']) and latest_entry['consagracao_semana2']:
-                            st.markdown(f"**Segunda Semana:**")
-                            st.write(latest_entry['consagracao_semana2'])
-                        
-                        if pd.notna(latest_entry['consagracao_semana3']) and latest_entry['consagracao_semana3']:
-                            st.markdown(f"**Terceira Semana:**")
-                            st.write(latest_entry['consagracao_semana3'])
-                        
-                        if pd.notna(latest_entry['consagracao_semana4']) and latest_entry['consagracao_semana4']:
-                            st.markdown(f"**Quarta Semana:**")
-                            st.write(latest_entry['consagracao_semana4'])
-                        
-                        if pd.notna(latest_entry['consagracao_semana5']) and latest_entry['consagracao_semana5']:
-                            st.markdown(f"**Quinta Semana:**")
-                            st.write(latest_entry['consagracao_semana5'])
-                        
-                        # Preparo Técnico (Ensaio, preparo técnico e equipamentos)
-                        st.markdown("### Preparo Técnico (Ensaio, preparo técnico e equipamentos)")
-                        
-                        if pd.notna(latest_entry['preparo_tecnico_semana1']) and latest_entry['preparo_tecnico_semana1']:
-                            st.markdown(f"**Primeira Semana:**")
-                            st.write(latest_entry['preparo_tecnico_semana1'])
-                        
-                        if pd.notna(latest_entry['preparo_tecnico_semana2']) and latest_entry['preparo_tecnico_semana2']:
-                            st.markdown(f"**Segunda Semana:**")
-                            st.write(latest_entry['preparo_tecnico_semana2'])
-                        
-                        if pd.notna(latest_entry['preparo_tecnico_semana3']) and latest_entry['preparo_tecnico_semana3']:
-                            st.markdown(f"**Terceira Semana:**")
-                            st.write(latest_entry['preparo_tecnico_semana3'])
-                        
-                        if pd.notna(latest_entry['preparo_tecnico_semana4']) and latest_entry['preparo_tecnico_semana4']:
-                            st.markdown(f"**Quarta Semana:**")
-                            st.write(latest_entry['preparo_tecnico_semana4'])
-                        
-                        if pd.notna(latest_entry['preparo_tecnico_semana5']) and latest_entry['preparo_tecnico_semana5']:
-                            st.markdown(f"**Quinta Semana:**")
-                            st.write(latest_entry['preparo_tecnico_semana5'])
-                        
-                        # Reuniões
-                        st.markdown("### Reuniões")
-                        
-                        if pd.notna(latest_entry['reunioes_semana1']) and latest_entry['reunioes_semana1']:
-                            st.markdown(f"**Primeira Semana:**")
-                            st.write(latest_entry['reunioes_semana1'])
-                        
-                        if pd.notna(latest_entry['reunioes_semana2']) and latest_entry['reunioes_semana2']:
-                            st.markdown(f"**Segunda Semana:**")
-                            st.write(latest_entry['reunioes_semana2'])
-                        
-                        if pd.notna(latest_entry['reunioes_semana3']) and latest_entry['reunioes_semana3']:
-                            st.markdown(f"**Terceira Semana:**")
-                            st.write(latest_entry['reunioes_semana3'])
-                        
-                        if pd.notna(latest_entry['reunioes_semana4']) and latest_entry['reunioes_semana4']:
-                            st.markdown(f"**Quarta Semana:**")
-                            st.write(latest_entry['reunioes_semana4'])
-                        
-                        if pd.notna(latest_entry['reunioes_semana5']) and latest_entry['reunioes_semana5']:
-                            st.markdown(f"**Quinta Semana:**")
-                            st.write(latest_entry['reunioes_semana5'])
+                        # Se estiver no modo semanal e uma semana específica estiver selecionada, mostrar apenas os dados dessa semana
+                        if periodicidade == "Semanal" and semana_filtro != "Todas":
+                            semana_num = int(semana_filtro)
+                            semana_campos = {
+                                1: 'consagracao_semana1',
+                                2: 'consagracao_semana2',
+                                3: 'consagracao_semana3',
+                                4: 'consagracao_semana4',
+                                5: 'consagracao_semana5'
+                            }
+                            
+                            campo = semana_campos[semana_num]
+                            if pd.notna(latest_entry[campo]) and latest_entry[campo]:
+                                st.markdown(f"**{semana_label[semana_num]}:**")
+                                st.write(latest_entry[campo])
+                            
+                            # Preparo Técnico (somente da semana selecionada)
+                            st.markdown("### Preparo Técnico (Ensaio, preparo técnico e equipamentos)")
+                            
+                            campo = f'preparo_tecnico_semana{semana_num}'
+                            if pd.notna(latest_entry[campo]) and latest_entry[campo]:
+                                st.markdown(f"**{semana_label[semana_num]}:**")
+                                st.write(latest_entry[campo])
+                            
+                            # Reuniões (somente da semana selecionada)
+                            st.markdown("### Reuniões")
+                            
+                            campo = f'reunioes_semana{semana_num}'
+                            if pd.notna(latest_entry[campo]) and latest_entry[campo]:
+                                st.markdown(f"**{semana_label[semana_num]}:**")
+                                st.write(latest_entry[campo])
+                        else:
+                            # Mostrar todas as semanas em modo mensal ou quando "Todas" as semanas estiverem selecionadas
+                            if pd.notna(latest_entry['consagracao_semana1']) and latest_entry['consagracao_semana1']:
+                                st.markdown(f"**Primeira Semana:**")
+                                st.write(latest_entry['consagracao_semana1'])
+                            
+                            if pd.notna(latest_entry['consagracao_semana2']) and latest_entry['consagracao_semana2']:
+                                st.markdown(f"**Segunda Semana:**")
+                                st.write(latest_entry['consagracao_semana2'])
+                            
+                            if pd.notna(latest_entry['consagracao_semana3']) and latest_entry['consagracao_semana3']:
+                                st.markdown(f"**Terceira Semana:**")
+                                st.write(latest_entry['consagracao_semana3'])
+                            
+                            if pd.notna(latest_entry['consagracao_semana4']) and latest_entry['consagracao_semana4']:
+                                st.markdown(f"**Quarta Semana:**")
+                                st.write(latest_entry['consagracao_semana4'])
+                            
+                            if pd.notna(latest_entry['consagracao_semana5']) and latest_entry['consagracao_semana5']:
+                                st.markdown(f"**Quinta Semana:**")
+                                st.write(latest_entry['consagracao_semana5'])
+                            
+                            # Preparo Técnico (Ensaio, preparo técnico e equipamentos)
+                            st.markdown("### Preparo Técnico (Ensaio, preparo técnico e equipamentos)")
+                            
+                            if pd.notna(latest_entry['preparo_tecnico_semana1']) and latest_entry['preparo_tecnico_semana1']:
+                                st.markdown(f"**Primeira Semana:**")
+                                st.write(latest_entry['preparo_tecnico_semana1'])
+                            
+                            if pd.notna(latest_entry['preparo_tecnico_semana2']) and latest_entry['preparo_tecnico_semana2']:
+                                st.markdown(f"**Segunda Semana:**")
+                                st.write(latest_entry['preparo_tecnico_semana2'])
+                            
+                            if pd.notna(latest_entry['preparo_tecnico_semana3']) and latest_entry['preparo_tecnico_semana3']:
+                                st.markdown(f"**Terceira Semana:**")
+                                st.write(latest_entry['preparo_tecnico_semana3'])
+                            
+                            if pd.notna(latest_entry['preparo_tecnico_semana4']) and latest_entry['preparo_tecnico_semana4']:
+                                st.markdown(f"**Quarta Semana:**")
+                                st.write(latest_entry['preparo_tecnico_semana4'])
+                            
+                            if pd.notna(latest_entry['preparo_tecnico_semana5']) and latest_entry['preparo_tecnico_semana5']:
+                                st.markdown(f"**Quinta Semana:**")
+                                st.write(latest_entry['preparo_tecnico_semana5'])
+                            
+                            # Reuniões
+                            st.markdown("### Reuniões")
+                            
+                            if pd.notna(latest_entry['reunioes_semana1']) and latest_entry['reunioes_semana1']:
+                                st.markdown(f"**Primeira Semana:**")
+                                st.write(latest_entry['reunioes_semana1'])
+                            
+                            if pd.notna(latest_entry['reunioes_semana2']) and latest_entry['reunioes_semana2']:
+                                st.markdown(f"**Segunda Semana:**")
+                                st.write(latest_entry['reunioes_semana2'])
+                            
+                            if pd.notna(latest_entry['reunioes_semana3']) and latest_entry['reunioes_semana3']:
+                                st.markdown(f"**Terceira Semana:**")
+                                st.write(latest_entry['reunioes_semana3'])
+                            
+                            if pd.notna(latest_entry['reunioes_semana4']) and latest_entry['reunioes_semana4']:
+                                st.markdown(f"**Quarta Semana:**")
+                                st.write(latest_entry['reunioes_semana4'])
+                            
+                            if pd.notna(latest_entry['reunioes_semana5']) and latest_entry['reunioes_semana5']:
+                                st.markdown(f"**Quinta Semana:**")
+                                st.write(latest_entry['reunioes_semana5'])
                     
                     # Seção 3: Treinamento e Capacitação
                     with tabs[1]:
