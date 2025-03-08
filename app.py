@@ -15,10 +15,11 @@ st.set_page_config(
 )
 
 DB_HOST = "db.tervnplvvbrjozuxylix.supabase.co"
-DB_PORT = "6543"
+DB_PORT = "5432"
 DB_NAME = "postgres"
 DB_USER = "postgres"
 DB_PASSWORD = "jEz@eGSP_C#2Zed"
+SSL_MODE = "require"  # Forçar SSL
 
 # Database connection function
 def connect_to_db():
@@ -29,7 +30,8 @@ def connect_to_db():
             user=DB_USER,
             password=DB_PASSWORD,
             host=DB_HOST,
-            port=DB_PORT
+            port=DB_PORT,
+            sslmode=SSL_MODE  
         )
         return conn
     except Exception as e:
