@@ -14,26 +14,28 @@ st.set_page_config(
     layout="wide"
 )
 
-DB_HOST = "db.tervnplvvbrjozuxylix.supabase.co"
-DB_PORT = "6543"
-DB_NAME = "postgres"
-DB_USER = "postgres"
-DB_PASSWORD = "jEz@eGSP_C#2Zed"
+# Database credentials
+DB_HOST = "145.223.92.209"  # Host Externo
+DB_PORT = "5432"  # Porta Externa
+DB_NAME = "postgresql"  # Nome do Banco de Dados
+DB_USER = "postgres"  # Usuário
+DB_PASSWORD = "ZAvbW7c67IKjNF"  # Senha
 
 # Database connection function
 def connect_to_db():
-    """Connect to the Supabase PostgreSQL database."""
+    """Connect to the PostgreSQL database."""
     try:
         conn = psycopg2.connect(
             dbname=DB_NAME,
             user=DB_USER,
             password=DB_PASSWORD,
             host=DB_HOST,
-            port=DB_PORT
+            port=DB_PORT,
+            client_encoding='UTF8'  # Força a codificação UTF-8
         )
         return conn
     except Exception as e:
-        st.error(f"Erro ao conectar ao banco de dados: {e}")
+        st.error(f"Erro ao conectar ao banco de dados: {str(e)}")
         return None
 
 # Initialize the database and tables if they don't exist
@@ -131,14 +133,11 @@ def save_evaluation(data):
         try:
             cur = conn.cursor()
             
-            # Filtrar listas vazias e converter para JSON
+            # Filtrar apenas os arrays não vazios
             treinamentos_clean = [t for t in data["treinamentos"] if t and t.strip()]
             estrategias_clean = [e for e in data["estrategias"] if e and e.strip()]
             
-            treinamentos_json = json.dumps(treinamentos_clean)
-            estrategias_json = json.dumps(estrategias_clean)
-            
-            # Insert query usando JSON
+            # Insert query usando parâmetros diretamente para os arrays
             cur.execute("""
                 INSERT INTO avaliacoes_ministerios (
                     ministerio, nome, email,
@@ -161,7 +160,7 @@ def save_evaluation(data):
                 data["consagracao_semana1"], data["consagracao_semana2"], data["consagracao_semana3"], data["consagracao_semana4"], data["consagracao_semana5"],
                 data["preparo_tecnico_semana1"], data["preparo_tecnico_semana2"], data["preparo_tecnico_semana3"], data["preparo_tecnico_semana4"], data["preparo_tecnico_semana5"],
                 data["reunioes_semana1"], data["reunioes_semana2"], data["reunioes_semana3"], data["reunioes_semana4"], data["reunioes_semana5"],
-                treinamentos_json, estrategias_json,
+                treinamentos_clean, estrategias_clean,
                 data["novos_membros"], data["membros_qualificacao"],
                 data["comentarios"], data["mes_referencia"], data["ano_referencia"]
             ))
