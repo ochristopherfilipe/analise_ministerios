@@ -355,6 +355,7 @@ def show_leader_login():
         login_button = st.form_submit_button("Entrar")
         
         if login_button:
+            clear_member_session_state()
             # Check if the password matches the leader's name
             if password == MINISTRY_LEADERS[ministerio]:
                 # Clear any existing member lists
