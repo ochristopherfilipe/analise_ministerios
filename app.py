@@ -179,6 +179,18 @@ def save_evaluation(data):
         try:
             cur = conn.cursor()
             
+            # Primeiro, verifica se já existe uma entrada para este ministério, semana, mês e ano
+            cur.execute("""
+                SELECT id, nomes_novos_membros, nomes_membros_qualificacao 
+                FROM avaliacoes_ministerios 
+                WHERE ministerio = %s 
+                AND semana_referencia = %s 
+                AND mes_referencia = %s 
+                AND ano_referencia = %s
+            """, (data["ministerio"], data["semana_referencia"], data["mes_referencia"], data["ano_referencia"]))
+            
+            result = cur.fetchone()
+            
             # Filtrar apenas os arrays não vazios
             treinamentos_clean = [t for t in data["treinamentos"] if t and t.strip()]
             estrategias_clean = [e for e in data["estrategias"] if e and e.strip()]
@@ -187,35 +199,84 @@ def save_evaluation(data):
             treinamentos_json = json.dumps(treinamentos_clean)
             estrategias_json = json.dumps(estrategias_clean)
             
-            # Insert query usando parâmetros diretamente para os arrays
-            cur.execute("""
-                INSERT INTO avaliacoes_ministerios (
-                    ministerio, nome, email,
-                    pontualidade, assiduidade_celebracoes, assiduidade_reunioes, trabalho_equipe,
-                    consagracao_semana1, consagracao_semana2, consagracao_semana3, consagracao_semana4, consagracao_semana5,
-                    preparo_tecnico_semana1, preparo_tecnico_semana2, preparo_tecnico_semana3, preparo_tecnico_semana4, preparo_tecnico_semana5,
-                    reunioes_semana1, reunioes_semana2, reunioes_semana3, reunioes_semana4, reunioes_semana5,
-                    treinamentos, estrategias,
-                    novos_membros, membros_qualificacao,
-                    nomes_novos_membros, nomes_membros_qualificacao,
-                    comentarios, mes_referencia, ano_referencia, semana_referencia
-                )
-                VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s
-                )
-            """, (
-                data["ministerio"], data["nome"], data["email"],
-                data["pontualidade"], data["assiduidade_celebracoes"], data["assiduidade_reunioes"], data["trabalho_equipe"],
-                data["consagracao_semana1"], data["consagracao_semana2"], data["consagracao_semana3"], data["consagracao_semana4"], data["consagracao_semana5"],
-                data["preparo_tecnico_semana1"], data["preparo_tecnico_semana2"], data["preparo_tecnico_semana3"], data["preparo_tecnico_semana4"], data["preparo_tecnico_semana5"],
-                data["reunioes_semana1"], data["reunioes_semana2"], data["reunioes_semana3"], data["reunioes_semana4"], data["reunioes_semana5"],
-                treinamentos_json, estrategias_json,
-                data["novos_membros"], data["membros_qualificacao"],
-                data["nomes_novos_membros"], data["nomes_membros_qualificacao"],
-                data["comentarios"], data["mes_referencia"], data["ano_referencia"], data["semana_referencia"]
-            ))
+            if result:
+                # Se já existe, atualiza a entrada
+                entry_id = result[0]
+                
+                # Atualiza o registro existente
+                cur.execute("""
+                    UPDATE avaliacoes_ministerios SET
+                        nome = %s,
+                        email = %s,
+                        pontualidade = %s,
+                        assiduidade_celebracoes = %s,
+                        assiduidade_reunioes = %s,
+                        trabalho_equipe = %s,
+                        consagracao_semana1 = %s,
+                        consagracao_semana2 = %s,
+                        consagracao_semana3 = %s,
+                        consagracao_semana4 = %s,
+                        consagracao_semana5 = %s,
+                        preparo_tecnico_semana1 = %s,
+                        preparo_tecnico_semana2 = %s,
+                        preparo_tecnico_semana3 = %s,
+                        preparo_tecnico_semana4 = %s,
+                        preparo_tecnico_semana5 = %s,
+                        reunioes_semana1 = %s,
+                        reunioes_semana2 = %s,
+                        reunioes_semana3 = %s,
+                        reunioes_semana4 = %s,
+                        reunioes_semana5 = %s,
+                        treinamentos = %s,
+                        estrategias = %s,
+                        novos_membros = %s,
+                        membros_qualificacao = %s,
+                        nomes_novos_membros = %s,
+                        nomes_membros_qualificacao = %s,
+                        comentarios = %s,
+                        data_submissao = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (
+                    data["nome"], data["email"],
+                    data["pontualidade"], data["assiduidade_celebracoes"], data["assiduidade_reunioes"], data["trabalho_equipe"],
+                    data["consagracao_semana1"], data["consagracao_semana2"], data["consagracao_semana3"], data["consagracao_semana4"], data["consagracao_semana5"],
+                    data["preparo_tecnico_semana1"], data["preparo_tecnico_semana2"], data["preparo_tecnico_semana3"], data["preparo_tecnico_semana4"], data["preparo_tecnico_semana5"],
+                    data["reunioes_semana1"], data["reunioes_semana2"], data["reunioes_semana3"], data["reunioes_semana4"], data["reunioes_semana5"],
+                    treinamentos_json, estrategias_json,
+                    data["novos_membros"], data["membros_qualificacao"],
+                    data["nomes_novos_membros"], data["nomes_membros_qualificacao"],
+                    data["comentarios"], entry_id
+                ))
+            else:
+                # Se não existe, insere uma nova entrada
+                cur.execute("""
+                    INSERT INTO avaliacoes_ministerios (
+                        ministerio, nome, email,
+                        pontualidade, assiduidade_celebracoes, assiduidade_reunioes, trabalho_equipe,
+                        consagracao_semana1, consagracao_semana2, consagracao_semana3, consagracao_semana4, consagracao_semana5,
+                        preparo_tecnico_semana1, preparo_tecnico_semana2, preparo_tecnico_semana3, preparo_tecnico_semana4, preparo_tecnico_semana5,
+                        reunioes_semana1, reunioes_semana2, reunioes_semana3, reunioes_semana4, reunioes_semana5,
+                        treinamentos, estrategias,
+                        novos_membros, membros_qualificacao,
+                        nomes_novos_membros, nomes_membros_qualificacao,
+                        comentarios, mes_referencia, ano_referencia, semana_referencia
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                """, (
+                    data["ministerio"], data["nome"], data["email"],
+                    data["pontualidade"], data["assiduidade_celebracoes"], data["assiduidade_reunioes"], data["trabalho_equipe"],
+                    data["consagracao_semana1"], data["consagracao_semana2"], data["consagracao_semana3"], data["consagracao_semana4"], data["consagracao_semana5"],
+                    data["preparo_tecnico_semana1"], data["preparo_tecnico_semana2"], data["preparo_tecnico_semana3"], data["preparo_tecnico_semana4"], data["preparo_tecnico_semana5"],
+                    data["reunioes_semana1"], data["reunioes_semana2"], data["reunioes_semana3"], data["reunioes_semana4"], data["reunioes_semana5"],
+                    treinamentos_json, estrategias_json,
+                    data["novos_membros"], data["membros_qualificacao"],
+                    data["nomes_novos_membros"], data["nomes_membros_qualificacao"],
+                    data["comentarios"], data["mes_referencia"], data["ano_referencia"], data["semana_referencia"]
+                ))
             
             conn.commit()
             return True
@@ -499,7 +560,7 @@ def show_evaluation_form():
             reunioes_semana5 = st.text_area("Descrição das Reuniões", key="reunioes5", help=f"Descreva as reuniões realizadas na {semana_label[st.session_state.semana_atual].lower()}.")
         
         # Form submit button
-        form1_submitted = st.form_submit_button("Salvar Informações Semanais")
+        form1_submitted = st.form_submit_button("Salvar Informações Semanais*")
         
         if form1_submitted:
             # Save form data to session state
@@ -576,6 +637,20 @@ def show_evaluation_form():
     st.markdown("---")
     st.subheader("Seção 5 - Novos Membros")
     
+    # Fetch existing members from database for the current month/year
+    existing_novos_membros, existing_membros_qualificacao = get_existing_members(
+        st.session_state.current_ministry, 
+        mes_referencia, 
+        ano_referencia
+    )
+    
+    # Initialize session state if empty and populate with existing members
+    if len(st.session_state.novos_membros_lista) == 0 and existing_novos_membros:
+        st.session_state.novos_membros_lista = existing_novos_membros.copy()
+    
+    if len(st.session_state.membros_qualificacao_lista) == 0 and existing_membros_qualificacao:
+        st.session_state.membros_qualificacao_lista = existing_membros_qualificacao.copy()
+    
     # New members and members in training
     col1, col2 = st.columns(2)
     
@@ -587,9 +662,14 @@ def show_evaluation_form():
         
         if st.button("Adicionar Novo Membro"):
             if novo_membro.strip():
-                st.session_state.novos_membros_lista.append(novo_membro.strip())
-                st.rerun()
+                # Avoid duplicates
+                if novo_membro.strip() not in st.session_state.novos_membros_lista:
+                    st.session_state.novos_membros_lista.append(novo_membro.strip())
+                    st.rerun()
+                else:
+                    st.warning("Este membro já está na lista de novos membros.")
         
+        # Display existing members with options
         if st.session_state.novos_membros_lista:
             st.markdown("**Novos membros adicionados:**")
             for i, membro in enumerate(st.session_state.novos_membros_lista):
@@ -609,15 +689,41 @@ def show_evaluation_form():
         
         if st.button("Adicionar Membro em Qualificação"):
             if membro_qualificacao.strip():
-                st.session_state.membros_qualificacao_lista.append(membro_qualificacao.strip())
-                st.rerun()
+                # Avoid duplicates
+                if membro_qualificacao.strip() not in st.session_state.membros_qualificacao_lista:
+                    st.session_state.membros_qualificacao_lista.append(membro_qualificacao.strip())
+                    st.rerun()
+                else:
+                    st.warning("Este membro já está na lista de membros em qualificação.")
         
+        # Display existing qualification members with options
         if st.session_state.membros_qualificacao_lista:
             st.markdown("**Membros em qualificação adicionados:**")
             for i, membro in enumerate(st.session_state.membros_qualificacao_lista):
-                col2a, col2b = st.columns([4, 1])
+                col2a, col2b, col2c = st.columns([3, 1, 1])
                 col2a.write(f"{i+1}. {membro}")
-                if col2b.button("Remover", key=f"remove_qualif_{i}"):
+                
+                # Add promotion button
+                if col2b.button("Promover", key=f"promote_{i}"):
+                    # Move member to new members list
+                    if membro not in st.session_state.novos_membros_lista:
+                        st.session_state.novos_membros_lista.append(membro)
+                    # Remove from qualification list
+                    st.session_state.membros_qualificacao_lista.pop(i)
+                    
+                    # Update the database to reflect this change for all entries of the month
+                    promote_member_in_database(
+                        st.session_state.current_ministry, 
+                        mes_referencia, 
+                        ano_referencia, 
+                        membro
+                    )
+                    
+                    st.success(f"Membro '{membro}' promovido com sucesso!")
+                    st.rerun()
+                
+                # Add remove button
+                if col2c.button("Remover", key=f"remove_qualif_{i}"):
                     st.session_state.membros_qualificacao_lista.pop(i)
                     st.rerun()
         
@@ -636,15 +742,15 @@ def show_evaluation_form():
         final_submitted = st.form_submit_button("Enviar Avaliação")
         
         if final_submitted:
-            # Validations
-            if not ministerio or not nome or not email:
+            # Validations - use the ministry from session state since it's defined outside the form
+            if not st.session_state.current_ministry or not nome or not email:
                 st.error("Por favor, preencha todos os campos obrigatórios marcados com *.")
             elif not is_valid_email(email):
                 st.error("Por favor, insira um email válido.")
             else:
-                # Prepare data
+                # Prepare data - use current_ministry from session state
                 data = {
-                    "ministerio": ministerio,
+                    "ministerio": st.session_state.current_ministry,
                     "nome": nome,
                     "email": email,
                     "pontualidade": pontualidade,
@@ -969,48 +1075,66 @@ def show_admin_dashboard():
                     col1, col2 = st.columns(2)
                     
                     with col1:
+                        # Get the total new members from the latest entries
                         total_new_members = ministry_data['novos_membros'].sum()
+                        
+                        # Get unique new member names
+                        novos_membros_unique = []
+                        
+                        # To avoid duplicates, we'll use the latest entries first
+                        for _, row in ministry_data.sort_values('data_submissao', ascending=False).iterrows():
+                            if pd.notna(row['nomes_novos_membros']) and row['nomes_novos_membros']:
+                                current_members = [nome.strip() for nome in row['nomes_novos_membros'].split('\n') if nome.strip()]
+                                for membro in current_members:
+                                    if membro not in novos_membros_unique:
+                                        novos_membros_unique.append(membro)
+                        
                         st.metric(
                             f"Total de Novos Membros ({periodicidade.lower().rstrip('l')})", 
-                            total_new_members
+                            len(novos_membros_unique)
                         )
                         
-                        if total_new_members > 0:
-                            # Coletar nomes de novos membros de todas as entradas no período
-                            nomes_novos = []
-                            for _, row in ministry_data.iterrows():
-                                if pd.notna(row['nomes_novos_membros']) and row['nomes_novos_membros']:
-                                    nomes_novos.extend([nome.strip() for nome in row['nomes_novos_membros'].split('\n') if nome.strip()])
-                            
-                            if nomes_novos:
-                                st.markdown("**Nomes dos Novos Membros:**")
-                                for nome in nomes_novos:
-                                    st.markdown(f"- {nome}")
+                        if novos_membros_unique:
+                            st.markdown("**Nomes dos Novos Membros:**")
+                            for nome in novos_membros_unique:
+                                st.markdown(f"- {nome}")
                     
                     with col2:
+                        # Get the total members in qualification from the latest entries
                         total_qualifying_members = ministry_data['membros_qualificacao'].sum()
+                        
+                        # Get unique members in qualification
+                        membros_qualificacao_unique = []
+                        
+                        # To avoid duplicates, we'll use the latest entries first
+                        for _, row in ministry_data.sort_values('data_submissao', ascending=False).iterrows():
+                            if pd.notna(row['nomes_membros_qualificacao']) and row['nomes_membros_qualificacao']:
+                                current_members = [nome.strip() for nome in row['nomes_membros_qualificacao'].split('\n') if nome.strip()]
+                                for membro in current_members:
+                                    if membro not in membros_qualificacao_unique and membro not in novos_membros_unique:
+                                        membros_qualificacao_unique.append(membro)
+                        
                         st.metric(
                             f"Total de Membros em Qualificação ({periodicidade.lower().rstrip('l')})", 
-                            total_qualifying_members
+                            len(membros_qualificacao_unique)
                         )
                         
-                        if total_qualifying_members > 0:
-                            # Coletar nomes de membros em qualificação de todas as entradas no período
-                            nomes_qualificacao = []
-                            for _, row in ministry_data.iterrows():
-                                if pd.notna(row['nomes_membros_qualificacao']) and row['nomes_membros_qualificacao']:
-                                    nomes_qualificacao.extend([nome.strip() for nome in row['nomes_membros_qualificacao'].split('\n') if nome.strip()])
-                            
-                            if nomes_qualificacao:
-                                st.markdown("**Nomes dos Membros em Qualificação:**")
-                                for nome in nomes_qualificacao:
-                                    st.markdown(f"- {nome}")
+                        if membros_qualificacao_unique:
+                            st.markdown("**Nomes dos Membros em Qualificação:**")
+                            for nome in membros_qualificacao_unique:
+                                st.markdown(f"- {nome}")
                     
                     # Exibir detalhes da Seção 2, 3 e 4 para o ministério selecionado
                     st.subheader("Informações Detalhadas")
                     
-                    # Obter a entrada mais recente para o ministério selecionado
-                    latest_entry = ministry_data.sort_values('data_submissao', ascending=False).iloc[0]
+                    # Definir os rótulos das semanas
+                    semana_label = {
+                        1: "Primeira Semana",
+                        2: "Segunda Semana",
+                        3: "Terceira Semana",
+                        4: "Quarta Semana",
+                        5: "Quinta Semana"
+                    }
                     
                     # Criar abas para cada seção
                     tabs = st.tabs(["Preparo da Equipe", "Treinamentos", "Estratégias", "Comentários"])
@@ -1018,15 +1142,6 @@ def show_admin_dashboard():
                     # Seção 2: Preparo da Equipe para a Celebração
                     with tabs[0]:
                         st.subheader("Seção 2 - Preparo da Equipe para a Celebração")
-                        
-                        # Definir os rótulos das semanas
-                        semana_label = {
-                            1: "Primeira Semana",
-                            2: "Segunda Semana",
-                            3: "Terceira Semana",
-                            4: "Quarta Semana",
-                            5: "Quinta Semana"
-                        }
                         
                         # Consagração (Jejum e Oração)
                         st.markdown("### Consagração (Jejum e Oração)")
@@ -1043,192 +1158,142 @@ def show_admin_dashboard():
                             }
                             
                             campo = semana_campos[semana_num]
-                            if pd.notna(latest_entry[campo]) and latest_entry[campo]:
+                            if pd.notna(ministry_data[campo].iloc[0]) and ministry_data[campo].iloc[0]:
                                 st.markdown(f"**{semana_label[semana_num]}:**")
-                                st.write(latest_entry[campo])
+                                st.write(ministry_data[campo].iloc[0])
                             
                             # Preparo Técnico (somente da semana selecionada)
                             st.markdown("### Preparo Técnico (Ensaio, preparo técnico e equipamentos)")
                             
                             campo = f'preparo_tecnico_semana{semana_num}'
-                            if pd.notna(latest_entry[campo]) and latest_entry[campo]:
+                            if pd.notna(ministry_data[campo].iloc[0]) and ministry_data[campo].iloc[0]:
                                 st.markdown(f"**{semana_label[semana_num]}:**")
-                                st.write(latest_entry[campo])
+                                st.write(ministry_data[campo].iloc[0])
                             
                             # Reuniões (somente da semana selecionada)
                             st.markdown("### Reuniões")
                             
                             campo = f'reunioes_semana{semana_num}'
-                            if pd.notna(latest_entry[campo]) and latest_entry[campo]:
+                            if pd.notna(ministry_data[campo].iloc[0]) and ministry_data[campo].iloc[0]:
                                 st.markdown(f"**{semana_label[semana_num]}:**")
-                                st.write(latest_entry[campo])
+                                st.write(ministry_data[campo].iloc[0])
                         else:
-                            # Mostrar todas as semanas em modo mensal ou quando "Todas" as semanas estiverem selecionadas
-                            if pd.notna(latest_entry['consagracao_semana1']) and latest_entry['consagracao_semana1']:
-                                st.markdown(f"**Primeira Semana:**")
-                                st.write(latest_entry['consagracao_semana1'])
+                            # Mostrar TODAS as semanas em modo mensal ou quando "Todas" as semanas estiverem selecionadas
+                            # Agrupar entradas por semana para obter dados de todas as semanas do mês
+                            semanas_data = {}
                             
-                            if pd.notna(latest_entry['consagracao_semana2']) and latest_entry['consagracao_semana2']:
-                                st.markdown(f"**Segunda Semana:**")
-                                st.write(latest_entry['consagracao_semana2'])
+                            # Processar todas as entradas do ministério no período selecionado
+                            for _, row in ministry_data.iterrows():
+                                semana = row['semana_referencia']
+                                if semana not in semanas_data:
+                                    semanas_data[semana] = row
                             
-                            if pd.notna(latest_entry['consagracao_semana3']) and latest_entry['consagracao_semana3']:
-                                st.markdown(f"**Terceira Semana:**")
-                                st.write(latest_entry['consagracao_semana3'])
+                            # Ordenar semanas
+                            semanas_ordenadas = sorted(semanas_data.keys())
                             
-                            if pd.notna(latest_entry['consagracao_semana4']) and latest_entry['consagracao_semana4']:
-                                st.markdown(f"**Quarta Semana:**")
-                                st.write(latest_entry['consagracao_semana4'])
+                            # Mostrar dados de cada semana
+                            for semana in semanas_ordenadas:
+                                entry = semanas_data[semana]
+                                
+                                # Consagração
+                                campo_consagracao = f'consagracao_semana{semana}'
+                                if pd.notna(entry[campo_consagracao]) and entry[campo_consagracao]:
+                                    st.markdown(f"**{semana_label[semana]}:**")
+                                    st.write(entry[campo_consagracao])
                             
-                            if pd.notna(latest_entry['consagracao_semana5']) and latest_entry['consagracao_semana5']:
-                                st.markdown(f"**Quinta Semana:**")
-                                st.write(latest_entry['consagracao_semana5'])
-                            
-                            # Preparo Técnico (Ensaio, preparo técnico e equipamentos)
+                            # Preparo Técnico para todas as semanas
                             st.markdown("### Preparo Técnico (Ensaio, preparo técnico e equipamentos)")
                             
-                            if pd.notna(latest_entry['preparo_tecnico_semana1']) and latest_entry['preparo_tecnico_semana1']:
-                                st.markdown(f"**Primeira Semana:**")
-                                st.write(latest_entry['preparo_tecnico_semana1'])
+                            for semana in semanas_ordenadas:
+                                entry = semanas_data[semana]
+                                campo_preparo = f'preparo_tecnico_semana{semana}'
+                                if pd.notna(entry[campo_preparo]) and entry[campo_preparo]:
+                                    st.markdown(f"**{semana_label[semana]}:**")
+                                    st.write(entry[campo_preparo])
                             
-                            if pd.notna(latest_entry['preparo_tecnico_semana2']) and latest_entry['preparo_tecnico_semana2']:
-                                st.markdown(f"**Segunda Semana:**")
-                                st.write(latest_entry['preparo_tecnico_semana2'])
-                            
-                            if pd.notna(latest_entry['preparo_tecnico_semana3']) and latest_entry['preparo_tecnico_semana3']:
-                                st.markdown(f"**Terceira Semana:**")
-                                st.write(latest_entry['preparo_tecnico_semana3'])
-                            
-                            if pd.notna(latest_entry['preparo_tecnico_semana4']) and latest_entry['preparo_tecnico_semana4']:
-                                st.markdown(f"**Quarta Semana:**")
-                                st.write(latest_entry['preparo_tecnico_semana4'])
-                            
-                            if pd.notna(latest_entry['preparo_tecnico_semana5']) and latest_entry['preparo_tecnico_semana5']:
-                                st.markdown(f"**Quinta Semana:**")
-                                st.write(latest_entry['preparo_tecnico_semana5'])
-                            
-                            # Reuniões
+                            # Reuniões para todas as semanas
                             st.markdown("### Reuniões")
                             
-                            if pd.notna(latest_entry['reunioes_semana1']) and latest_entry['reunioes_semana1']:
-                                st.markdown(f"**Primeira Semana:**")
-                                st.write(latest_entry['reunioes_semana1'])
-                            
-                            if pd.notna(latest_entry['reunioes_semana2']) and latest_entry['reunioes_semana2']:
-                                st.markdown(f"**Segunda Semana:**")
-                                st.write(latest_entry['reunioes_semana2'])
-                            
-                            if pd.notna(latest_entry['reunioes_semana3']) and latest_entry['reunioes_semana3']:
-                                st.markdown(f"**Terceira Semana:**")
-                                st.write(latest_entry['reunioes_semana3'])
-                            
-                            if pd.notna(latest_entry['reunioes_semana4']) and latest_entry['reunioes_semana4']:
-                                st.markdown(f"**Quarta Semana:**")
-                                st.write(latest_entry['reunioes_semana4'])
-                            
-                            if pd.notna(latest_entry['reunioes_semana5']) and latest_entry['reunioes_semana5']:
-                                st.markdown(f"**Quinta Semana:**")
-                                st.write(latest_entry['reunioes_semana5'])
+                            for semana in semanas_ordenadas:
+                                entry = semanas_data[semana]
+                                campo_reunioes = f'reunioes_semana{semana}'
+                                if pd.notna(entry[campo_reunioes]) and entry[campo_reunioes]:
+                                    st.markdown(f"**{semana_label[semana]}:**")
+                                    st.write(entry[campo_reunioes])
                     
                     # Seção 3: Treinamento e Capacitação
                     with tabs[1]:
                         st.subheader("Seção 3 - Treinamento e Capacitação")
                         
-                        # Verificar o tipo de dados e processar de acordo
-                        treinamentos_data = latest_entry['treinamentos']
+                        # Aggregating all training data from the selected period
+                        all_treinamentos = []
                         
-                        # Tentar interpretar como JSON se for string
-                        if isinstance(treinamentos_data, str):
-                            try:
-                                treinamentos_list = json.loads(treinamentos_data)
-                            except json.JSONDecodeError:
-                                # Se falhar como JSON, verificar se é array PostgreSQL
-                                if treinamentos_data.startswith('{') and treinamentos_data.endswith('}'):
-                                    # Remover chaves e dividir por vírgulas
-                                    treinamentos_raw = treinamentos_data[1:-1]
-                                    if treinamentos_raw:  # Verificar se não está vazio
-                                        # Dividir por vírgulas e tratar strings com aspas
-                                        import re
-                                        treinamentos_list = re.findall(r'"([^"]*)"', treinamentos_raw)
-                                    else:
-                                        treinamentos_list = []
-                                else:
-                                    treinamentos_list = []
-                        elif isinstance(treinamentos_data, list):
-                            # Já é uma lista
-                            treinamentos_list = treinamentos_data
-                        else:
-                            treinamentos_list = []
+                        # Process each entry
+                        for _, row in ministry_data.iterrows():
+                            treinamentos_data = row['treinamentos']
+                            
+                            # Try to interpret as JSON if it's a string
+                            if isinstance(treinamentos_data, str):
+                                try:
+                                    treinamentos_data = json.loads(treinamentos_data)
+                                except json.JSONDecodeError:
+                                    treinamentos_data = []
+                            
+                            # Ensure we have an iterable
+                            if isinstance(treinamentos_data, list):
+                                for item in treinamentos_data:
+                                    if item and item not in all_treinamentos:  # Avoid duplicates
+                                        all_treinamentos.append(item)
                         
-                        if treinamentos_list and len(treinamentos_list) > 0:
-                            for i, treinamento in enumerate(treinamentos_list):
-                                if treinamento:  # Verifica se não está vazio
-                                    st.markdown(f"**Treinamento/Capacitação {i+1}:**")
-                                    st.write(treinamento)
-                                    st.markdown("---")
+                        # Display all trainings
+                        if all_treinamentos:
+                            for i, treinamento in enumerate(all_treinamentos):
+                                st.markdown(f"**{i+1}.** {treinamento}")
                         else:
-                            st.info("Não foram registrados treinamentos ou capacitações.")
+                            st.info("Nenhum treinamento registrado para este período.")
                     
                     # Seção 4: Estratégias para Crescimento
                     with tabs[2]:
                         st.subheader("Seção 4 - Estratégias para Crescimento")
                         
-                        # Verificar o tipo de dados e processar de acordo
-                        estrategias_data = latest_entry['estrategias']
+                        # Aggregating all strategies data from the selected period
+                        all_estrategias = []
                         
-                        # Tentar interpretar como JSON se for string
-                        if isinstance(estrategias_data, str):
-                            try:
-                                estrategias_list = json.loads(estrategias_data)
-                            except json.JSONDecodeError:
-                                # Se falhar como JSON, verificar se é array PostgreSQL
-                                if estrategias_data.startswith('{') and estrategias_data.endswith('}'):
-                                    # Remover chaves e dividir por vírgulas
-                                    estrategias_raw = estrategias_data[1:-1]
-                                    if estrategias_raw:  # Verificar se não está vazio
-                                        # Dividir por vírgulas e tratar strings com aspas
-                                        import re
-                                        estrategias_list = re.findall(r'"([^"]*)"', estrategias_raw)
-                                    else:
-                                        estrategias_list = []
-                                else:
-                                    estrategias_list = []
-                        elif isinstance(estrategias_data, list):
-                            # Já é uma lista
-                            estrategias_list = estrategias_data
-                        else:
-                            estrategias_list = []
+                        # Process each entry
+                        for _, row in ministry_data.iterrows():
+                            estrategias_data = row['estrategias']
+                            
+                            # Try to interpret as JSON if it's a string
+                            if isinstance(estrategias_data, str):
+                                try:
+                                    estrategias_data = json.loads(estrategias_data)
+                                except json.JSONDecodeError:
+                                    estrategias_data = []
+                            
+                            # Ensure we have an iterable
+                            if isinstance(estrategias_data, list):
+                                for item in estrategias_data:
+                                    if item and item not in all_estrategias:  # Avoid duplicates
+                                        all_estrategias.append(item)
                         
-                        if estrategias_list and len(estrategias_list) > 0:
-                            for i, estrategia in enumerate(estrategias_list):
-                                if estrategia:  # Verifica se não está vazio
-                                    st.markdown(f"**Estratégia {i+1}:**")
-                                    st.write(estrategia)
-                                    st.markdown("---")
+                        # Display all strategies
+                        if all_estrategias:
+                            for i, estrategia in enumerate(all_estrategias):
+                                st.markdown(f"**{i+1}.** {estrategia}")
                         else:
-                            st.info("Não foram registradas estratégias para crescimento.")
+                            st.info("Nenhuma estratégia registrada para este período.")
                     
-                    # Aba de comentários
+                    # Seção 6: Comentários
                     with tabs[3]:
-                        st.subheader("Comentários Recentes")
+                        st.subheader("Seção 6 - Comentários e Sugestões")
                         
-                        recent_comments = ministry_data[
-                            ['data_submissao', 'nome', 'comentarios']
-                        ].sort_values('data_submissao', ascending=False).head(5)
-                        
-                        for _, row in recent_comments.iterrows():
-                            if pd.notna(row['comentarios']) and row['comentarios'].strip():
-                                st.markdown(f"""
-                                **Data:** {row['data_submissao'].strftime('%d/%m/%Y')}  
-                                **Nome:** {row['nome']}
-                                
-                                  
-                                **Comentário:** {row['comentarios']}
-                                ---
-                                """)
-                        
-                        if recent_comments.empty or not any(pd.notna(row['comentarios']) for _, row in recent_comments.iterrows()):
-                            st.info("Não há comentários registrados.")
+                        # Display comments from all entries in the period
+                        if not ministry_data.empty:
+                            for i, row in ministry_data.iterrows():
+                                if pd.notna(row['comentarios']) and row['comentarios'].strip():
+                                    semana = row['semana_referencia']
+                                    st.markdown(f"**Comentários da {semana_label[semana]}:**")
+                                    st.write(row['comentarios'])
                     
                     # Adicionar seletor de submissões anteriores
                     if len(ministry_data) > 1:
@@ -1255,6 +1320,124 @@ def show_admin_dashboard():
             conn.close()
     else:
         st.error("Não foi possível conectar ao banco de dados.")
+
+# Get members from database for the current month
+def get_existing_members(ministerio, mes, ano):
+    """Fetch existing members data for the specified ministry, month and year."""
+    conn = connect_to_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            
+            # Query to get latest members data for the specific ministry, month and year
+            cur.execute("""
+                SELECT 
+                    nomes_novos_membros, 
+                    nomes_membros_qualificacao 
+                FROM 
+                    avaliacoes_ministerios 
+                WHERE 
+                    ministerio = %s AND 
+                    mes_referencia = %s AND 
+                    ano_referencia = %s
+                ORDER BY
+                    data_submissao DESC
+                LIMIT 1
+            """, (ministerio, mes, ano))
+            
+            result = cur.fetchone()
+            
+            # Initialize lists for members
+            novos_membros = []
+            membros_qualificacao = []
+            
+            # Process the results
+            if result:
+                # Add new members from the latest entry
+                if result[0] and result[0].strip():
+                    novos_membros = [m.strip() for m in result[0].split('\n') if m.strip()]
+                
+                # Add members in qualification from the latest entry
+                if result[1] and result[1].strip():
+                    membros_qualificacao = [m.strip() for m in result[1].split('\n') if m.strip()]
+            
+            return novos_membros, membros_qualificacao
+            
+        except Exception as e:
+            st.error(f"Erro ao buscar membros do banco de dados: {e}")
+            return [], []
+        finally:
+            cur.close()
+            conn.close()
+    
+    return [], []
+
+# Function to promote a member from qualification to new member in the database
+def promote_member_in_database(ministerio, mes, ano, membro):
+    """Update all records for the current month to move a member from qualification to new member list."""
+    conn = connect_to_db()
+    if conn:
+        try:
+            cur = conn.cursor()
+            
+            # Get all entries for this ministry, month and year
+            cur.execute("""
+                SELECT id, nomes_novos_membros, nomes_membros_qualificacao 
+                FROM avaliacoes_ministerios 
+                WHERE ministerio = %s 
+                AND mes_referencia = %s 
+                AND ano_referencia = %s
+            """, (ministerio, mes, ano))
+            
+            entries = cur.fetchall()
+            
+            for entry in entries:
+                entry_id = entry[0]
+                novos_membros_text = entry[1] or ""
+                membros_qualificacao_text = entry[2] or ""
+                
+                # Parse member lists
+                novos_membros = [m.strip() for m in novos_membros_text.split('\n') if m.strip()]
+                membros_qualificacao = [m.strip() for m in membros_qualificacao_text.split('\n') if m.strip()]
+                
+                # Check if the member is in qualification list
+                if membro in membros_qualificacao:
+                    # Remove from qualification
+                    membros_qualificacao = [m for m in membros_qualificacao if m != membro]
+                    
+                    # Add to new members if not already there
+                    if membro not in novos_membros:
+                        novos_membros.append(membro)
+                    
+                    # Update counts
+                    novos_membros_count = len(novos_membros)
+                    membros_qualificacao_count = len(membros_qualificacao)
+                    
+                    # Update database
+                    cur.execute("""
+                        UPDATE avaliacoes_ministerios SET
+                            nomes_novos_membros = %s,
+                            nomes_membros_qualificacao = %s,
+                            novos_membros = %s,
+                            membros_qualificacao = %s
+                        WHERE id = %s
+                    """, (
+                        '\n'.join(novos_membros),
+                        '\n'.join(membros_qualificacao),
+                        novos_membros_count,
+                        membros_qualificacao_count,
+                        entry_id
+                    ))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            st.error(f"Erro ao promover membro no banco de dados: {e}")
+            return False
+        finally:
+            cur.close()
+            conn.close()
+    return False
 
 # Run the app
 if __name__ == "__main__":
