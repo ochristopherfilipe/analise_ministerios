@@ -6,6 +6,22 @@ from datetime import datetime
 import re
 import plotly.express as px
 import json
+import os
+
+# Import configuration
+try:
+    from config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, MINISTRY_LEADERS, ADMIN_USERNAME, ADMIN_PASSWORD
+except ImportError:
+    st.error("Configuration file not found. Please make sure config.py exists with the required variables.")
+    # Default values for development (should be empty or placeholders in production)
+    DB_HOST = "localhost"
+    DB_PORT = "5432"
+    DB_NAME = "postgres"
+    DB_USER = "postgres"
+    DB_PASSWORD = "postgres"
+    MINISTRY_LEADERS = {}
+    ADMIN_USERNAME = ""
+    ADMIN_PASSWORD = ""
 
 # Set page configuration
 st.set_page_config(
@@ -13,23 +29,6 @@ st.set_page_config(
     page_icon="🏆",
     layout="wide"
 )
-
-# Database credentials
-DB_HOST = "145.223.92.209"  # Host Externo
-DB_PORT = "5432"  # Porta Externa
-DB_NAME = "postgresql"  # Nome do Banco de Dados
-DB_USER = "postgres"  # Usuário
-DB_PASSWORD = "ZAvbW7c67IKjNF"  # Senha
-
-# Map of ministry leaders
-MINISTRY_LEADERS = {
-    "Milaf": "Wendel",
-    "Midaf": "Marcela",
-    "Técnica": "Isaac",
-    "Comunicação": "Marcus",
-    "Intercessão": "Moises",
-    "Introdutores": "Mario"
-}
 
 # Database connection function
 def connect_to_db():
@@ -709,7 +708,7 @@ def show_admin_area():
             login_button = st.form_submit_button("Entrar")
             
             if login_button:
-                if username == "EDILENE SANTOS" and password == "PASTORAEDILENE":
+                if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
                     st.session_state.admin_authenticated = True
                     st.rerun()
                 else:
