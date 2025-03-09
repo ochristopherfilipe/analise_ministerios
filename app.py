@@ -318,6 +318,14 @@ def main():
     else:
         show_admin_area()
 
+# Function to clear member-related session state
+def clear_member_session_state():
+    """Reset all member-related session state variables to ensure a clean state."""
+    st.session_state.novos_membros_lista = []
+    st.session_state.membros_qualificacao_lista = []
+    if "last_ministry" in st.session_state:
+        st.session_state.last_ministry = None
+
 # Leader login page
 def show_leader_login():
     st.title("Login de Líder de Ministério")
@@ -325,6 +333,12 @@ def show_leader_login():
     st.markdown("""
     Por favor, faça login para acessar o formulário de avaliação.
     """)
+    
+    # Add a clear session button for troubleshooting
+    #if st.button("Limpar Sessão (Resolver Problemas)"):
+    #    clear_member_session_state()
+    #    st.success("Sessão limpa com sucesso!")
+    #    st.rerun()
     
     with st.form("leader_login_form"):
         # Create a dropdown with ministry options
@@ -343,6 +357,10 @@ def show_leader_login():
         if login_button:
             # Check if the password matches the leader's name
             if password == MINISTRY_LEADERS[ministerio]:
+                # Clear any existing member lists
+                clear_member_session_state()
+                
+                # Set authentication and ministry
                 st.session_state.leader_authenticated = True
                 st.session_state.current_ministry = ministerio
                 st.success(f"Login bem-sucedido como líder do ministério {ministerio}!")
@@ -361,6 +379,8 @@ def show_evaluation_form():
     if st.button("Sair"):
         st.session_state.leader_authenticated = False
         st.session_state.current_ministry = None
+        # Clear member lists when logging out
+        clear_member_session_state()
         st.rerun()
     
     st.markdown("""
@@ -377,6 +397,18 @@ def show_evaluation_form():
         st.session_state.estrategia_count = 1
     if "semana_atual" not in st.session_state:
         st.session_state.semana_atual = 1
+    
+    # Track the last ministry used to manage member lists
+    if "last_ministry" not in st.session_state:
+        st.session_state.last_ministry = None
+    
+    # Check if ministry has changed since last access - if so, reset member lists
+    if st.session_state.last_ministry != st.session_state.current_ministry:
+        st.session_state.novos_membros_lista = []
+        st.session_state.membros_qualificacao_lista = []
+        st.session_state.last_ministry = st.session_state.current_ministry
+    
+    # Initialize member lists if they don't exist
     if "novos_membros_lista" not in st.session_state:
         st.session_state.novos_membros_lista = []
     if "membros_qualificacao_lista" not in st.session_state:
@@ -637,19 +669,26 @@ def show_evaluation_form():
     st.markdown("---")
     st.subheader("Seção 5 - Novos Membros")
     
-    # Fetch existing members from database for the current month/year
-    existing_novos_membros, existing_membros_qualificacao = get_existing_members(
-        st.session_state.current_ministry, 
-        mes_referencia, 
-        ano_referencia
-    )
-    
-    # Initialize session state if empty and populate with existing members
-    if len(st.session_state.novos_membros_lista) == 0 and existing_novos_membros:
-        st.session_state.novos_membros_lista = existing_novos_membros.copy()
-    
-    if len(st.session_state.membros_qualificacao_lista) == 0 and existing_membros_qualificacao:
-        st.session_state.membros_qualificacao_lista = existing_membros_qualificacao.copy()
+    # Only load members if the lists are empty - ensures we don't mix members from different ministries
+    if len(st.session_state.novos_membros_lista) == 0 and len(st.session_state.membros_qualificacao_lista) == 0:
+        # Log the current ministry for debugging
+        st.write(f"Carregando membros para: {st.session_state.current_ministry}")
+        
+        # Fetch existing members from database for the current ministry/month/year
+        existing_novos_membros, existing_membros_qualificacao = get_existing_members(
+            st.session_state.current_ministry, 
+            mes_referencia, 
+            ano_referencia
+        )
+        
+        # Only populate the lists if we got results AND the current ministry matches
+        if existing_novos_membros:
+            st.session_state.novos_membros_lista = existing_novos_membros.copy()
+            st.write(f"Carregados {len(existing_novos_membros)} novos membros")
+        
+        if existing_membros_qualificacao:
+            st.session_state.membros_qualificacao_lista = existing_membros_qualificacao.copy()
+            st.write(f"Carregados {len(existing_membros_qualificacao)} membros em qualificação")
     
     # New members and members in training
     col1, col2 = st.columns(2)
@@ -657,6 +696,9 @@ def show_evaluation_form():
     # Column 1: New members
     with col1:
         st.markdown("### Novos Membros Incorporados")
+        
+        # Show the ministry name for clarity
+        st.info(f"Exibindo membros do ministério: {st.session_state.current_ministry}")
         
         novo_membro = st.text_input("Nome do novo membro", key="novo_membro_input")
         
@@ -1330,6 +1372,7 @@ def get_existing_members(ministerio, mes, ano):
             cur = conn.cursor()
             
             # Query to get latest members data for the specific ministry, month and year
+            # Ensure we're strictly filtering by ministry to avoid cross-ministry data
             cur.execute("""
                 SELECT 
                     nomes_novos_membros, 
@@ -1351,8 +1394,9 @@ def get_existing_members(ministerio, mes, ano):
             novos_membros = []
             membros_qualificacao = []
             
-            # Process the results
+            # Process the results only if we have data for the specified ministry
             if result:
+                st.write(f"Encontrados dados para {ministerio}")
                 # Add new members from the latest entry
                 if result[0] and result[0].strip():
                     novos_membros = [m.strip() for m in result[0].split('\n') if m.strip()]
