@@ -15,6 +15,6 @@ MINISTRY_LEADERS = {
     "Midaf": "Marcela",
     "Técnica": "Isaac",
     "Comunicação": "Marcus",
-    "Intercessão": "Moises",
-    "Introdutores": "Mario"
+    "Intercessão": "Moyses",
+    "Introdutores": "Marioemiriam"
 } 
